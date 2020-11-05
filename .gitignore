@@ -1,0 +1,7 @@
+razao_dominio/
+razao_pra_conciliacao/
+__pycache__/
+.vscode
+build/
+dist/
+*.spec
