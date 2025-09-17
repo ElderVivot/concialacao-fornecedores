@@ -3,16 +3,24 @@ import sys
 import unicodedata
 import re
 import xlrd
+import pandas
 import datetime
+import logging
+import numpy
+
+logger = logging.getLogger(__name__)
+
 
 def getOnlyNameFile(nameFileOriginal):
     nameFileSplit = nameFileOriginal.split('.')
     nameFile = '.'.join(nameFileSplit[:-1])
     return nameFile
 
+
 def getDateTimeNowInFormatStr():
     dateTimeObj = datetime.datetime.now()
     return dateTimeObj.strftime("%Y_%m_%d_%H_%M")
+
 
 def removerAcentosECaracteresEspeciais(palavra):
     # Unicode normalize transforma um caracter em seu equivalente em latin.
@@ -22,12 +30,14 @@ def removerAcentosECaracteresEspeciais(palavra):
     # Usa expressão regular para retornar a palavra apenas com valores corretos
     return re.sub('[^a-zA-Z0-9.!+:><=)?$(/*,\-_ \\\]', '', palavraTratada)
 
+
 def minimalizeSpaces(text):
     _result = text
     while ("  " in _result):
         _result = _result.replace("  ", " ")
     _result = _result.strip()
     return _result
+
 
 def searchPositionFieldForName(header, nameField=''):
     nameField = treatTextField(nameField)
@@ -36,14 +46,16 @@ def searchPositionFieldForName(header, nameField=''):
     except Exception:
         return None
 
+
 def analyzeIfFieldIsValid(data, name, returnDefault=""):
     try:
         return data[name]
     except Exception:
         return returnDefault
 
+
 def analyzeIfFieldHasPositionInFileEnd(data, positionInFile, positionInFileEnd):
-    positionInFile = positionInFile-1
+    positionInFile = positionInFile - 1
 
     try:
         if positionInFileEnd <= 0:
@@ -53,6 +65,7 @@ def analyzeIfFieldHasPositionInFileEnd(data, positionInFile, positionInFileEnd):
     except Exception:
         return ""
 
+
 def analyzeIfFieldIsValidMatrix(data, position, returnDefault="", positionOriginal=False):
     # :data é o vetor com as informações
     # :position a posição que a informação que quero retornar se encontra no vetor
@@ -61,17 +74,19 @@ def analyzeIfFieldIsValidMatrix(data, position, returnDefault="", positionOrigin
     # começa com zero. Quando True ele não faz esta substração.
     try:
         if positionOriginal is False:
-            return data[position-1]
+            return data[position - 1]
         else:
             return data[position]
     except Exception:
         return returnDefault
+
 
 def treatTextField(value):
     try:
         return minimalizeSpaces(removerAcentosECaracteresEspeciais(value.strip().upper()))
     except Exception:
         return ""
+
 
 def treatTextFieldInVector(data, numberOfField=0, fieldsHeader=[], nameFieldHeader='', positionInFileEnd=0, keepTextOriginal=True):
     """
@@ -98,6 +113,7 @@ def treatTextFieldInVector(data, numberOfField=0, fieldsHeader=[], nameFieldHead
         except Exception:
             return ""
 
+
 def treatDecimalField(value, numberOfDecimalPlaces=2):
     if type(value) == float:
         return value
@@ -105,10 +121,10 @@ def treatDecimalField(value, numberOfDecimalPlaces=2):
         value = str(value)
         value = re.sub('[^0-9.,-]', '', value)
         if value.find(',') >= 0 and value.find('.') >= 0:
-            value = value.replace('.','')
+            value = value.replace('.', '')
 
         if value.find(',') >= 0:
-            value = value.replace(',','.')
+            value = value.replace(',', '.')
 
         if value.find('.') < 0:
             value = int(value)
@@ -116,6 +132,7 @@ def treatDecimalField(value, numberOfDecimalPlaces=2):
         return float(value)
     except Exception as e:
         return float(0)
+
 
 def treatDecimalFieldInVector(data, numberOfField=0, fieldsHeader=[], nameFieldHeader='', row='main', positionInFileEnd=0):
     """
@@ -143,6 +160,7 @@ def treatDecimalFieldInVector(data, numberOfField=0, fieldsHeader=[], nameFieldH
         except Exception:
             return float(0)
 
+
 def treatDateField(valorCampo, formatoData=1):
     """
     :param valorCampo: Informar o campo string que será transformado para DATA
@@ -154,8 +172,9 @@ def treatDateField(valorCampo, formatoData=1):
 
     valorCampo = str(valorCampo).strip()
 
-    lengthField = 10 # tamanho padrão da data são 10 caracteres, só muda se não tiver os separados de dia, mês e ano
+    lengthField = 10  # tamanho padrão da data são 10 caracteres, só muda se não tiver os separados de dia, mês e ano
 
+    formatoDataStr = "%d/%m/%Y"
     if formatoData == 1:
         formatoDataStr = "%d/%m/%Y"
     elif formatoData == 2:
@@ -175,6 +194,7 @@ def treatDateField(valorCampo, formatoData=1):
         return datetime.datetime.strptime(valorCampo[:lengthField], formatoDataStr).date()
     except ValueError:
         return None
+
 
 def treatDateFieldInVector(data, numberOfField=0, fieldsHeader=[], nameFieldHeader='', formatoData=1, row='main', positionInFileEnd=0):
     """
@@ -203,6 +223,7 @@ def treatDateFieldInVector(data, numberOfField=0, fieldsHeader=[], nameFieldHead
         except Exception:
             return None
 
+
 def treatNumberField(value, isInt=False):
     if type(value) == int:
         return value
@@ -219,6 +240,7 @@ def treatNumberField(value, isInt=False):
             return value
     except Exception:
         return 0
+
 
 def treatNumberFieldInVector(data, numberOfField=-1, fieldsHeader=[], nameFieldHeader='', isInt=False, positionInFileEnd=0):
     """
@@ -240,7 +262,82 @@ def treatNumberFieldInVector(data, numberOfField=-1, fieldsHeader=[], nameFieldH
         try:
             return treatNumberField(analyzeIfFieldHasPositionInFileEnd(data, numberOfField, positionInFileEnd), isInt)
         except Exception:
-            return 0 
+            return 0
+
+
+def identifiesAndTransformTypeDataOfSeriesPandas(data):
+    newData = ''
+    typeData = str(type(data))
+
+    if typeData.count('str') > 0:
+        newData = treatTextField(data)
+    elif typeData.count('int') > 0:
+        newData = treatNumberField(data, isInt=True)
+    elif typeData.count('float') > 0:
+        newData = treatDecimalField(data)
+    elif typeData.count('pandas') > 0 and typeData.count('timestamp') > 0:
+        newData = data.strftime("%d/%m/%Y")
+    elif typeData.count('numpy') > 0 and typeData.count('datetime') > 0:
+        newData = numpy.datetime_as_string(data, unit='D')
+        newData = treatDateField(newData, 2)
+        newData = newData.strftime("%d/%m/%Y") if newData is not None else data
+    else:
+        newData = data
+
+    return newData
+
+
+def readExcelPandas(filePath: str, nameSheetToFilter=''):
+    listOfDataAllRows = []
+    dataOfRow = []
+
+    try:
+        try:
+            sheetNames = pandas.ExcelFile(filePath).sheet_names
+        except Exception:
+            try:
+                sheetNames = pandas.ExcelFile(filePath, engine='xlrd').sheet_names
+            except Exception:
+                try:
+                    sheetNames = pandas.ExcelFile(filePath, engine='openpyxl').sheet_names
+                except Exception as e:
+                    logger.error(e)
+                    sheetNames = []
+
+        for sheet in sheetNames:
+            try:
+                if nameSheetToFilter == '' or sheet == nameSheetToFilter:
+                    try:
+                        dataFrame = pandas.read_excel(filePath, sheet_name=sheet, header=None)
+                    except Exception:
+                        try:
+                            dataFrame = pandas.read_excel(filePath, sheet_name=sheet, header=None, engine='xlrd')
+                        except Exception:
+                            try:
+                                dataFrame = pandas.read_excel(filePath, sheet_name=sheet, header=None, engine='openpyxl')
+                            except Exception as e:
+                                logger.error(e)
+                                return []
+
+                    dataFrameDropNa = dataFrame.dropna(how='all')
+                    dataFrameFillNa = dataFrameDropNa.fillna('')
+                    dataFrameToRecords = dataFrameFillNa.to_records(index=False)
+                    for dataRow in dataFrameToRecords:
+                        dataOfRow.append(sheet)
+                        for data in dataRow:
+                            newData = identifiesAndTransformTypeDataOfSeriesPandas(data)
+                            dataOfRow.append(newData)
+
+                        listOfDataAllRows.append(dataOfRow.copy())
+                        dataOfRow.clear()
+            except Exception as e:
+                logger.exception(e)
+
+    except Exception as e:
+        logger.exception(e)
+
+    return listOfDataAllRows
+
 
 def readExcel(arquivo, nameSheetToFilter='filterAll'):
     lista_dados = []
@@ -313,4 +410,19 @@ def readExcel(arquivo, nameSheetToFilter='filterAll'):
             else:
                 continue
     # retorna uma lista dos dados
-    return lista_dados 
+    return lista_dados
+
+
+def removeAnArrayFromWithinAnother(arraySet=[]):
+    newArray = []
+    try:
+        for array in arraySet:
+            if array is None:
+                continue
+            for vector in array:
+                if len(vector) == 0:
+                    continue
+                newArray.append(vector)
+    except Exception:
+        pass
+    return newArray

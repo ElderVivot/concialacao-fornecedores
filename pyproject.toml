@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "concialacao-fornecedores"
+version = "0.1.0"
+description = ""
+authors = ["ElderVivot <eldervivot@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pandas = "^2.3.2"
+xlsxwriter = "^3.2.9"
+xlrd = "^2.0.2"
+openpyxl = "^3.1.5"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
